@@ -1,0 +1,1895 @@
+{
+  "name": "Booknetic-Sheet Integ",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "booknetic",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -32,
+        192
+      ],
+      "id": "d1f4184e-a957-4f7e-81b7-cf2b89be75cd",
+      "name": "Webhook",
+      "webhookId": "aa8a879f-4440-4e07-8ee4-7936f7491b4b"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w",
+          "mode": "list",
+          "cachedResultName": "Booknetic Bookings",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Bookings Data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        480,
+        784
+      ],
+      "id": "5d3f0f7f-bb79-499c-8ad2-0d7e1022582d",
+      "name": "Get Sheets' Names",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "I82S2hMMGRkTwcJl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "034980c1-32a8-4829-8f66-a8d0b6173c4e",
+              "leftValue": "={{ $json['Appointment Date'] }}",
+              "rightValue": "={{ DateTime.now().plus({ days: 1 }).toFormat(\"yyyy-MM-dd\") }}",
+              "operator": {
+                "type": "dateTime",
+                "operation": "beforeOrEquals"
+              }
+            },
+            {
+              "id": "115f4383-a9eb-4ee9-a433-01679d8eedb5",
+              "leftValue": "={{ $json[\"Appointment Date\"] }}",
+              "rightValue": "={{ DateTime.now().toFormat(\"yyyy-MM-dd\") }}",
+              "operator": {
+                "type": "dateTime",
+                "operation": "afterOrEquals"
+              }
+            },
+            {
+              "id": "5845fab3-528e-417c-852b-9efbc0f8c838",
+              "leftValue": "={{ $json.appointment_status }}",
+              "rightValue": "Approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        704,
+        784
+      ],
+      "id": "cd8fb2f1-45a2-45dc-a92a-65cd030b04c4",
+      "name": "Filtering Tours for Today and Tomorrow"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a data processing and mapping expert.\nYour task is to analyze, clean, and correctly map incoming booking details into a structured JSON output.\n\nBe extremely careful with:\n- Price fields (service, adult, kids)\n- Always output price fields with their currency\n- Count fields (PAX, adult_cnt, kids_cnt)\n- String–number confusion (e.g., \"2 Adults x 50 AED\", \"Kids(3) 120\")\n- Always output cleaned and standardized numeric or \"NA\" values only — no strings like “x 2”.\n- Incase for any field the value is missing or null set it to \"NA\".\n\nIncoming Fields:\n\nAppointment ID: {{ $json['Appointment ID'] }}\nAppointment Date: {{ $json['Appointment Date'] }}\nAppointment Time: {{ $json['Appointment Time'] }}\nAppointment Service Price: {{ $json.app_service_price }}\nAppointment Extra Price: {{ $json.app_extra_price }}\nBooking Status: {{ $json.appointment_status }}\nAppointment Extra List (with prices): {{ $json.app_extra_list }}\nAppointment Total Price: {{ $json.app_sum_price }}\nAppointmnet Paid Price: {{ $json.app_paid_price }}\nAppointment Total Attendees: {{ $json.app_total_attendees }}\nService Category: {{ $json.service_category }}\nService Name: {{ $json.service_name }}\nService Price: {{ $json.service_price }}\nService Duration: {{ $json.service_duration }}\nCustomer Name: {{ $json['Customer Name'] }}\nCustomer Phone: {{ $json['Customer Phone'] }}\nCustomer Email: {{ $json['Customer Email'] }}\n\nCore Rules for Field Extraction and Error Handling\n🔹 Fixed Fields (map directly as-is)\napp_id → Appointment ID\napp_date → Appointment Date\napp_time → Appointment Time\nbooking_status → Booking Status\napp_total_price → Appointment Total Price\nservice_category → Service Category\nservice_name → Service Name\nservice_duration → Service Duration\ncustomer_name → Customer Name\ncustomer_number → Customer Phone\ncustomer_email → Customer Email\n\nDynamic Fields with Logic:\n🟩 1. service_price\n- If Service Price > 0 → use that value.\n- If Service Price = 0 or null:\n- Check 'Appointment Extra List (with prices)'':\n    - If contains entries with either “Adults” or “Kids” or both → set service_price = \"NA\".\n    - Else → extract any price value (QAR, AED, etc.) divided by the quantity(count) if mentioned. E.g. if given something like x4 - QAR 1 800.00 then service_price = QAR 450.00\n- Always output a numeric value (no text), or \"NA\" if unclear.\n- Do Not Consider any price value from additional_services.\n\n🟩 2. adult_price and kids_price\n- Check Appointment Extra List (with prices) for words like:\n\"Adult\", \"Adults\", \"Men\" → adult_price\n\"Kid\", \"Child\", \"Children\" → kids_price\n- Extract the price and divided by its related quantity(count).\n- If not available, set value to \"NA\".\n- Do Not Consider any price value from additional_services.\n\n🟩 3. PAX\n- If Service Price > 0 → use 'Appointment Total Attendees'.\n- If Service Price = 0 or null, check 'Appointment Extra List (with prices)'. If it doen't contain any adult or kid related keyword then PAX is the count mentioned there else set value to \"NA\".\n(E.g. Mangrove Kayaking For Adults x4 - QAR 720.00, therefore PAX=NA)\n(E.g. Mangrove Kayaking x4 - QAR 720.00, therefore PAX=4)\n- Must be a numeric value.\n- If missing, set value to \"NA\".- Do Not Consider any count from additional_services.\n- Do Not Consider any count from additional_services.\n\n🟩 4. adult_cnt and kids_cnt\n- Parse from 'Appointment Extra List (with prices)' by looking for counts:\ne.g., “2 Adults x 50 AED” → adult_cnt = 2\ne.g., “Kids (3)” or “3 Kids” → kids_cnt = 3\n- If counts not mentioned but prices are found:\n- Default adult_cnt = 1 if only adult price present.\n- Default kids_cnt = 1 if only kids price present.\n- If nothing is found, set \"NA\".\n- Do Not Consider any count from additional_services.\n\n🟩 5. additional_services\n- Parse from 'Appointment Extra List (with prices)' by looking for related keyword like \"addtional\", \"In-addition\", \"Addon\",etc.\n- If it contains then set its value with the service along with its mentioned cost and count else set it to \"NA\".\n- In case of multiple additional services, add new line character between them.\n\n🟩 5. driver_required\n- Check for terms like 'transport', 'pickup', 'drop off' and related terms in additional_services.\n- If found set value to 'Yes' else 'No'.\n\nTo Verify Dynamic Fields:\nUse the below formula to cross verify your parsed data, if it checks proceed else rectify it.\n\n{{ $json.app_sum_price }} = PAX*service_price + adult_cnt*adult_price + kids_cnt*kids_price",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1184,
+        0
+      ],
+      "id": "599a9b7f-3048-4ce5-9fe7-b4696f400fe6",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1168,
+        208
+      ],
+      "id": "558461fa-fb8c-497f-a3bf-8a8c02ce4dcb",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "fl6sxvn5M1m7Za9O",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"app_id\": \"Appointment ID\",\n  \"app_date\": \"Appointment Date\",\n  \"app_time\": \"Appointment Time\",\n  \"booking_status\": \"Booking Status\",\n  \"service_price\": \"\",\n  \"adult_price\": \"\",\n  \"kids_price\": \"\",\n  \"PAX\": \"\",\n  \"adult_cnt\": \"\",\n  \"kids_cnt\": \"\",\n  \"app_total_price\": \"Appointment Total Price\",\n  \"app_paid_price\": \"Appointment Paid Price\",\n  \"service_category\": \"Service Category\",\n  \"service_name\": \"Service Name\",\n  \"service_duration\": \"Service Duration\",\n  \"additional_services\": \"\",\n  \"driver_required\": \"Yes/No\",\n  \"customer_name\": \"Customer Name\",\n  \"customer_number\": \"Customer Phone\",\n  \"customer_email\": \"Customer Email\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1344,
+        208
+      ],
+      "id": "3a35facf-5814-4727-8d1b-aa191d3dd1ba",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9e1103db-6933-4d32-b5f8-f5386adbab83",
+              "leftValue": "={{ $json.output.PAX }}",
+              "rightValue": "=NA",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1520,
+        0
+      ],
+      "id": "a40a23c2-b919-40d7-9be4-9e3e7da150c9",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a data processing and mapping expert.\nYour task is to analyze, clean, and correctly map incoming booking details into a structured JSON output.\n\nBe extremely careful with:\n- Price fields (service, adult, kids)\n- Always output price fields with their currency\n- Count fields (PAX, adult_cnt, kids_cnt)\n- String–number confusion (e.g., \"2 Adults x 50 AED\", \"Kids(3) 120\")\n- Always output cleaned and standardized numeric or \"NA\" values only — no strings like “x 2”.\n- Incase for any field the value is missing or null set it to \"NA\".\n\nIncoming Fields:\n\nAppointment ID: {{ $json['Appointment ID'] }}\nAppointment Date: {{ $json['Appointment Date'] }}\nAppointment Time: {{ $json['Appointment Time'] }}\nAppointment Service Price: {{ $json.app_service_price }}\nAppointment Extra Price: {{ $json.app_extra_price }}\nBooking Status: {{ $json.appointment_status }}\nAppointment Extra List (with prices): {{ $json.app_extra_list }}\nAppointment Total Price: {{ $json.app_sum_price }}\nAppointmnet Paid Price: {{ $json.app_paid_price }}\nAppointment Total Attendees: {{ $json.app_total_attendees }}\nService Category: {{ $json.service_category }}\nService Name: {{ $json.service_name }}\nService Price: {{ $json.service_price }}\nService Duration: {{ $json.service_duration }}\nCustomer Name: {{ $json['Customer Name'] }}\nCustomer Phone: {{ $json['Customer Phone'] }}\nCustomer Email: {{ $json['Customer Email'] }}\n\nCore Rules for Field Extraction and Error Handling\n🔹 Fixed Fields (map directly as-is)\napp_id → Appointment ID\napp_date → Appointment Date\napp_time → Appointment Time\nbooking_status → Booking Status\napp_total_price → Appointment Total Price\nservice_category → Service Category\nservice_name → Service Name\nservice_duration → Service Duration\ncustomer_name → Customer Name\ncustomer_number → Customer Phone\ncustomer_email → Customer Email\n\nDynamic Fields with Logic:\n🟩 1. service_price\n- If Service Price > 0 → use that value.\n- If Service Price = 0 or null:\n- Check 'Appointment Extra List (with prices)'':\n    - If contains entries with either “Adults” or “Kids” or both → set service_price = \"NA\".\n    - Else → extract any price value (QAR, AED, etc.) divided by the quantity(count) if mentioned. E.g. if given something like x4 - QAR 1 800.00 then service_price = QAR 450.00\n- Always output a numeric value (no text), or \"NA\" if unclear.\n- Do Not Consider any price value from additional_services.\n\n🟩 2. adult_price and kids_price\n- Check Appointment Extra List (with prices) for words like:\n\"Adult\", \"Adults\", \"Men\" → adult_price\n\"Kid\", \"Child\", \"Children\" → kids_price\n- Extract the price and divided by its related quantity(count).\n- If not available, set value to \"NA\".\n- Do Not Consider any price value from additional_services.\n\n🟩 3. PAX\n- If Service Price > 0 → use 'Appointment Total Attendees'.\n- If Service Price = 0 or null, check 'Appointment Extra List (with prices)'. If it doen't contain any adult or kid related keyword then PAX is the count mentioned there else set value to \"NA\".\n(E.g. Mangrove Kayaking For Adults x4 - QAR 720.00, therefore PAX=NA)\n(E.g. Mangrove Kayaking x4 - QAR 720.00, therefore PAX=4)\n- Must be a numeric value.\n- If missing, set value to \"NA\".- Do Not Consider any count from additional_services.\n- Do Not Consider any count from additional_services.\n\n🟩 4. adult_cnt and kids_cnt\n- Parse from 'Appointment Extra List (with prices)' by looking for counts:\ne.g., “2 Adults x 50 AED” → adult_cnt = 2\ne.g., “Kids (3)” or “3 Kids” → kids_cnt = 3\n- If counts not mentioned but prices are found:\n- Default adult_cnt = 1 if only adult price present.\n- Default kids_cnt = 1 if only kids price present.\n- If nothing is found, set \"NA\".\n- Do Not Consider any count from additional_services.\n\n🟩 5. additional_services\n- Parse from 'Appointment Extra List (with prices)' by looking for related keyword like \"addtional\", \"In-addition\", \"Addon\",etc.\n- If it contains then set its value with the service along with its mentioned cost and count else set it to \"NA\".\n- In case of multiple additional services, add new line character between them.\n\n🟩 5. driver_required\n- Check for terms like 'transport', 'pickup', 'drop off' and related terms in additional_services.\n- If found set value to 'Yes' else 'No'.\n\nTo Verify Dynamic Fields:\nUse the below formula to cross verify your parsed data, if it checks proceed else rectify it.\n\n{{ $json.app_sum_price }} = PAX*service_price + adult_cnt*adult_price + kids_cnt*kids_price",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        944,
+        784
+      ],
+      "id": "7cbdbd1a-0ee0-4029-86b9-7addac597fc3",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        928,
+        992
+      ],
+      "id": "4b5b12db-0033-4e80-bc08-2e74a8762c4f",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "fl6sxvn5M1m7Za9O",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"app_id\": \"Appointment ID\",\n  \"app_date\": \"Appointment Date\",\n  \"app_time\": \"Appointment Time\",\n  \"booking_status\": \"Booking Status\",\n  \"service_price\": \"\",\n  \"adult_price\": \"\",\n  \"kids_price\": \"\",\n  \"PAX\": \"\",\n  \"adult_cnt\": \"\",\n  \"kids_cnt\": \"\",\n  \"app_total_price\": \"Appointment Total Price\",\n  \"app_paid_price\": \"Appointment Paid Price\",\n  \"service_category\": \"Service Category\",\n  \"service_name\": \"Service Name\",\n  \"service_duration\": \"Service Duration\",\n  \"additional_services\": \"\",\n  \"driver_required\": \"Yes/No\",\n  \"customer_name\": \"Customer Name\",\n  \"customer_number\": \"Customer Phone\",\n  \"customer_email\": \"Customer Email\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1104,
+        992
+      ],
+      "id": "a1e5ec99-7ec7-441f-b3ee-b7d57b9b5011",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9e1103db-6933-4d32-b5f8-f5386adbab83",
+              "leftValue": "={{ $json.output.PAX }}",
+              "rightValue": "=NA",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1312,
+        784
+      ],
+      "id": "26f0ff0a-7f75-4a81-92b5-effc24e9b999",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.appointment_status }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists",
+                      "singleValue": true
+                    },
+                    "id": "6e51e33d-a609-4aea-b04d-2c786027afa1"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "New Bookling"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8316bc82-532b-4947-af40-3415aea66ee2",
+                    "leftValue": "={{ $json.body.status_update }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Status Update"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "738bf6a2-5058-4244-87e9-d19c936622eb",
+                    "leftValue": "={{ $json.body.payment_paid }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Payment Update"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        144,
+        176
+      ],
+      "id": "28520dc6-97b3-44be-a410-0e01ba820fa8",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1a276283-cc94-44a2-b476-ca095a4859ff",
+              "name": "body",
+              "value": "={{ $json.body }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "fac9250b-0fb2-4a06-8c23-05f94c0e73f9",
+      "name": "Fetching Booking Details"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- Original Logic (unchanged) ---\nlet adult_cnt = $json.output.adult_cnt;\nlet kids_cnt = $json.output.kids_cnt;\nlet PAX = $json.output.PAX;\n\nconst adult = (adult_cnt === \"NA\" || adult_cnt === null || adult_cnt === undefined || adult_cnt === \"\")\n  ? 0\n  : Number(adult_cnt);\n\nconst kids = (kids_cnt === \"NA\" || kids_cnt === null || kids_cnt === undefined || kids_cnt === \"\")\n  ? 0\n  : Number(kids_cnt);\n\nconst pax = (PAX === \"NA\" || PAX === null || PAX === undefined || PAX === \"\")\n  ? 0\n  : Number(PAX);\n\n// Base item with corrected values\nconst baseItem = {\n  json: {\n    ...$json.output,\n    adult_cnt: adult,\n    kids_cnt: kids,\n    PAX: pax\n  }\n};\n\n// --- Additional Output Items ---\n\n// 1️⃣ Second item with default number\nconst secondItem = {\n  json: {\n    ...baseItem.json,\n    customer_number: \"+97477706906\" // default number\n  }\n};\n\n// 2️⃣ Third item: only if service_name contains \"kayaking\"\nlet thirdItem = null;\nif (\n  baseItem.json.service_name &&\n  baseItem.json.service_name.toLowerCase().includes(\"kayaking\")\n) {\n  thirdItem = {\n    json: {\n      ...baseItem.json,\n      customer_number: \"+97430233207\" // kayaking-specific number\n    }\n  };\n}\n\n// 3️⃣ Fourth item: only if driver_required = \"Yes\"\nlet driverItem = null;\nif (\n  baseItem.json.driver_required &&\n  baseItem.json.driver_required.toLowerCase() === \"yes\"\n) {\n  driverItem = {\n    json: {\n      ...baseItem.json,\n      customer_number: \"+97471383233\" // driver-required number\n    }\n  };\n}\n\n// --- Build output array ---\nconst outputItems = [baseItem, secondItem];\nif (thirdItem) outputItems.push(thirdItem);\nif (driverItem) outputItems.push(driverItem);\n\n// Return 2, 3, or 4 items\nreturn outputItems;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1744,
+        -112
+      ],
+      "id": "03c08d9d-6c3b-4cd7-bee2-3836c7511f80",
+      "name": "PAX Normalizer"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- Existing Logic (unchanged) ---\nlet adult_cnt = $json.output.adult_cnt;\nlet kids_cnt = $json.output.kids_cnt;\n\nconst adult = (adult_cnt === \"NA\" || adult_cnt === null || adult_cnt === undefined || adult_cnt === \"\")\n  ? 0\n  : Number(adult_cnt);\n\nconst kids = (kids_cnt === \"NA\" || kids_cnt === null || kids_cnt === undefined || kids_cnt === \"\")\n  ? 0\n  : Number(kids_cnt);\n\n// Base item (original logic)\nconst baseItem = {\n  json: {\n    ...$json.output,\n    adult_cnt: adult,\n    kids_cnt: kids,\n    PAX: adult + kids\n  }\n};\n\n// --- Generate additional items ---\n\n// 1️⃣ Second item: same as base but with default number\nconst secondItem = {\n  json: {\n    ...baseItem.json,\n    customer_number: \"+97477706906\"   // default number\n  }\n};\n\n// 2️⃣ Third item: only if service_name includes \"kayaking\"\nlet thirdItem = null;\nif (\n  baseItem.json.service_name &&\n  baseItem.json.service_name.toLowerCase().includes(\"kayaking\")\n) {\n  thirdItem = {\n    json: {\n      ...baseItem.json,\n      customer_number: \"+97430233207\"\n    }\n  };\n}\n\n// 3️⃣ Fourth item: only if driver_required = \"Yes\"\nlet driverItem = null;\nif (\n  baseItem.json.driver_required &&\n  baseItem.json.driver_required.toLowerCase() === \"yes\"\n) {\n  driverItem = {\n    json: {\n      ...baseItem.json,\n      customer_number: \"+97471383233\"   // driver-required number\n    }\n  };\n}\n\n// --- Build final output array ---\nconst outputItems = [baseItem, secondItem];\nif (thirdItem) outputItems.push(thirdItem);\nif (driverItem) outputItems.push(driverItem);\n\n// Output multiple items\nreturn outputItems;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1744,
+        128
+      ],
+      "id": "1263910a-69bf-40a2-9e5f-f8d5dfecb512",
+      "name": "PAX Normalizer 2"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w",
+          "mode": "list",
+          "cachedResultName": "Booknetic Bookings",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Bookings Data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Appointment ID": "={{ $json.body.appointment_id }}",
+            "appointment_status": "={{ $json.body.status_update }}"
+          },
+          "matchingColumns": [
+            "Appointment ID"
+          ],
+          "schema": [
+            {
+              "id": "Appointment ID",
+              "displayName": "Appointment ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Booking Creation Time",
+              "displayName": "Booking Creation Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Appointment Date",
+              "displayName": "Appointment Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Appointment Time",
+              "displayName": "Appointment Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Appointment Duration",
+              "displayName": "Appointment Duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "app_service_price",
+              "displayName": "app_service_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "app_extra_price",
+              "displayName": "app_extra_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "appointment_status",
+              "displayName": "appointment_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "app_extra_list",
+              "displayName": "app_extra_list",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "app_sum_price",
+              "displayName": "app_sum_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "app_paid_price",
+              "displayName": "app_paid_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "app_payment_method",
+              "displayName": "app_payment_method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "app_total_attendees",
+              "displayName": "app_total_attendees",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "service_category",
+              "displayName": "service_category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "service_name",
+              "displayName": "service_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "service_price",
+              "displayName": "service_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "service_duration",
+              "displayName": "service_duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Customer Name",
+              "displayName": "Customer Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Customer Phone",
+              "displayName": "Customer Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Customer Email",
+              "displayName": "Customer Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        416,
+        192
+      ],
+      "id": "dae65731-12ca-4513-89ee-85a6522f34f3",
+      "name": "Update Booking Status",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "I82S2hMMGRkTwcJl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w",
+          "mode": "list",
+          "cachedResultName": "Booknetic Bookings",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Bookings Data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Appointment ID": "={{ $json.body.appointment_id }}",
+            "app_paid_price": "={{ $json.body.payment_paid }}"
+          },
+          "matchingColumns": [
+            "Appointment ID"
+          ],
+          "schema": [
+            {
+              "id": "Appointment ID",
+              "displayName": "Appointment ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Booking Creation Time",
+              "displayName": "Booking Creation Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Appointment Date",
+              "displayName": "Appointment Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Appointment Time",
+              "displayName": "Appointment Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Appointment Duration",
+              "displayName": "Appointment Duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "app_service_price",
+              "displayName": "app_service_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "app_extra_price",
+              "displayName": "app_extra_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "appointment_status",
+              "displayName": "appointment_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "app_extra_list",
+              "displayName": "app_extra_list",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "app_sum_price",
+              "displayName": "app_sum_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "app_paid_price",
+              "displayName": "app_paid_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "app_payment_method",
+              "displayName": "app_payment_method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "app_total_attendees",
+              "displayName": "app_total_attendees",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "service_category",
+              "displayName": "service_category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "service_name",
+              "displayName": "service_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "service_price",
+              "displayName": "service_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "service_duration",
+              "displayName": "service_duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Customer Name",
+              "displayName": "Customer Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Customer Phone",
+              "displayName": "Customer Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Customer Email",
+              "displayName": "Customer Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        416,
+        384
+      ],
+      "id": "7a8af7aa-fde7-4289-adfb-134496945720",
+      "name": "Update Paid Amount",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "I82S2hMMGRkTwcJl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 90
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        0
+      ],
+      "id": "25bccbf2-1c30-4011-b7ea-d5c043dcb69e",
+      "name": "Wait",
+      "webhookId": "0c942502-663a-4d1b-99a2-a6cac3049833"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w",
+          "mode": "list",
+          "cachedResultName": "Booknetic Bookings",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Bookings Data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Appointment ID",
+              "lookupValue": "={{ $json[\"Appointment ID\"] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        992,
+        0
+      ],
+      "id": "01763dac-9af7-48cc-ae4a-83b3876a57eb",
+      "name": "Getting Newly Added Booking",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "I82S2hMMGRkTwcJl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w",
+          "mode": "list",
+          "cachedResultName": "Booknetic Bookings",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Bookings Data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Appointment ID": "={{ $json.body.appointment_id }}",
+            "Appointment Date": "={{ $json.body.appointment_date }}",
+            "Appointment Duration": "={{ $json.body.appointment_duration }}",
+            "app_service_price": "={{ $json.body.app_service_price }}",
+            "app_extra_price": "={{ $json.body.app_extra_price }}",
+            "appointment_status": "={{ $json.body.appointment_status }}",
+            "app_extra_list": "={{ $json.body.app_extra_list }}",
+            "app_sum_price": "={{ $json.body.app_sum_price }}",
+            "app_paid_price": "={{ $json.body.app_paid_price }}",
+            "app_payment_method": "={{ $json.body.app_payment_method }}",
+            "app_total_attendees": "={{ $json.body.app_total_attendees }}",
+            "service_name": "={{ $json.body.service_name }}",
+            "service_category": "={{ $json.body.service_category }}",
+            "service_price": "={{ $json.body.service_price }}",
+            "service_duration": "={{ $json.body.service_duration }}",
+            "Customer Name": "={{ $json.body.customer_name }}",
+            "Customer Phone": "={{ $json.body.customer_phone }}",
+            "Customer Email": "={{ $json.body.customer_email }}",
+            "Appointment Time": "={{ $json.body.appointment_time }}",
+            "Booking Creation Time": "={{ $json.body.app_create_date }} {{ $json.body.app_create_time }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Appointment ID",
+              "displayName": "Appointment ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Booking Creation Time",
+              "displayName": "Booking Creation Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Appointment Date",
+              "displayName": "Appointment Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Appointment Time",
+              "displayName": "Appointment Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Appointment Duration",
+              "displayName": "Appointment Duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "app_service_price",
+              "displayName": "app_service_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "app_extra_price",
+              "displayName": "app_extra_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "appointment_status",
+              "displayName": "appointment_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "app_extra_list",
+              "displayName": "app_extra_list",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "app_sum_price",
+              "displayName": "app_sum_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "app_paid_price",
+              "displayName": "app_paid_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "app_payment_method",
+              "displayName": "app_payment_method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "app_total_attendees",
+              "displayName": "app_total_attendees",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "service_category",
+              "displayName": "service_category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "service_name",
+              "displayName": "service_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "service_price",
+              "displayName": "service_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "service_duration",
+              "displayName": "service_duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Customer Name",
+              "displayName": "Customer Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Customer Phone",
+              "displayName": "Customer Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Customer Email",
+              "displayName": "Customer Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        608,
+        0
+      ],
+      "id": "c6b796c7-71a7-465c-9bbc-c294329ff984",
+      "name": "Append Row for New Bookings",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "I82S2hMMGRkTwcJl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\n\nfor (const item of items) {\n\n  // Support both structures: item.json.output OR item.json\n  const src = item.json && item.json.output ? item.json.output : item.json;\n\n  // --- Original Logic (unchanged) ---\n  let adult_cnt = src.adult_cnt;\n  let kids_cnt = src.kids_cnt;\n  let PAX = src.PAX;\n\n  const adult = (adult_cnt === \"NA\" || adult_cnt === null || adult_cnt === undefined || adult_cnt === \"\")\n    ? 0\n    : Number(adult_cnt);\n\n  const kids = (kids_cnt === \"NA\" || kids_cnt === null || kids_cnt === undefined || kids_cnt === \"\")\n    ? 0\n    : Number(kids_cnt);\n\n  const pax = (PAX === \"NA\" || PAX === null || PAX === undefined || PAX === \"\")\n    ? 0\n    : Number(PAX);\n\n  // Base item (data normalized)\n  const baseItem = {\n    json: {\n      ...src,\n      adult_cnt: adult,\n      kids_cnt: kids,\n      PAX: pax\n    }\n  };\n\n  // Always output base item\n  results.push(baseItem);\n\n  // --- New: driver_required logic ---\n  if (src.driver_required && String(src.driver_required).toLowerCase() === \"yes\") {\n    results.push({\n      json: {\n        ...baseItem.json,\n        customer_number: \"+97471383233\"\n      }\n    });\n  }\n}\n\n// Return all processed items\nreturn results;\n\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1536,
+        672
+      ],
+      "id": "2e228367-6086-45fe-b802-e6284e643444",
+      "name": "PAX Normalizer 3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\n\nfor (const item of items) {\n  // Support either structure: item.json.output (older nodes) OR item.json (direct)\n  const src = item.json && item.json.output ? item.json.output : item.json;\n\n  // --- Original Logic (unchanged) ---\n  let adult_cnt = src.adult_cnt;\n  let kids_cnt = src.kids_cnt;\n\n  const adult = (adult_cnt === \"NA\" || adult_cnt === null || adult_cnt === undefined || adult_cnt === \"\")\n    ? 0\n    : Number(adult_cnt);\n\n  const kids = (kids_cnt === \"NA\" || kids_cnt === null || kids_cnt === undefined || kids_cnt === \"\")\n    ? 0\n    : Number(kids_cnt);\n\n  // PAX = adult + kids (explicit requirement from earlier)\n  const pax = adult + kids;\n\n  // Base item with corrected values (keep rest of original fields intact)\n  const baseItem = {\n    json: {\n      ...src,\n      adult_cnt: adult,\n      kids_cnt: kids,\n      PAX: pax\n    }\n  };\n\n  // Push base item for this input\n  results.push(baseItem);\n\n  // --- Additional Output: driver_required = \"Yes\" (per-item) ---\n  if (src.driver_required && String(src.driver_required).toLowerCase() === \"yes\") {\n    results.push({\n      json: {\n        ...baseItem.json,\n        customer_number: \"+97471383233\"\n      }\n    });\n  }\n}\n\n// Return all generated items (1 or 2 outputs per input)\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1536,
+        912
+      ],
+      "id": "c76685f8-2b7b-4b39-ac08-ad094c31fbe8",
+      "name": "PAX Normalizer 4"
+    },
+    {
+      "parameters": {
+        "content": "# Runs at 00:00 am Everyday\n## It loops over each booking in the database and sends reminder to the Customer and \n## the Driver (if any) for their assigned tour scheduled either the same day or next day.",
+        "height": 560,
+        "width": 1776,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        208,
+        592
+      ],
+      "typeVersion": 1,
+      "id": "caa518db-277a-4182-9c83-c1a5db98e14d",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        288,
+        784
+      ],
+      "id": "f2b2530f-d80e-4fc9-9c59-1f22f4fc55ef",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "content": "# Fetches Booking Details & Updates via Booknetic\n# It adds the received data to google sheet and sends confirmation\n# message to the customer as well as other required people.",
+        "height": 784,
+        "width": 2288,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -80,
+        -240
+      ],
+      "typeVersion": 1,
+      "id": "3fbbcdd7-9c31-4a11-95d4-aeda98cd5b38",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "phoneNumberId": "843177978870149",
+        "recipientPhoneNumber": "={{ $json.customer_number }}",
+        "template": "booknetic_confirm_pax|en",
+        "components": {
+          "component": [
+            {
+              "bodyParameters": {
+                "parameter": [
+                  {
+                    "text": "={{$json.customer_name}}"
+                  },
+                  {
+                    "text": "={{$json.service_name}}"
+                  },
+                  {
+                    "text": "={{$json.service_category}}"
+                  },
+                  {
+                    "text": "={{$json.app_date}}"
+                  },
+                  {
+                    "text": "={{$json.app_time}}"
+                  },
+                  {
+                    "text": "={{$json.service_duration}}"
+                  },
+                  {
+                    "text": "={{$json.PAX}}"
+                  },
+                  {
+                    "text": "={{$json.adult_cnt}}"
+                  },
+                  {
+                    "text": "={{ $json.adult_price }}"
+                  },
+                  {
+                    "text": "={{$json.kids_cnt}}"
+                  },
+                  {
+                    "text": "={{ $json.kids_price }}"
+                  },
+                  {
+                    "text": "={{ $json.service_price }}"
+                  },
+                  {
+                    "text": "={{$json.additional_services}}"
+                  },
+                  {
+                    "text": "={{$json.app_total_price}}"
+                  },
+                  {
+                    "text": "={{ $json.app_paid_price }}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1952,
+        -112
+      ],
+      "id": "d71893d1-324d-475c-9182-b1a8611d6a30",
+      "name": "Send template",
+      "webhookId": "a67ca175-f2b8-4c99-ae0e-7b22de55d35b",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "Qkwpq4H3JlTH5FKG",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "phoneNumberId": "843177978870149",
+        "recipientPhoneNumber": "={{ $json.customer_number }}",
+        "template": "booknetic_confirm|en",
+        "components": {
+          "component": [
+            {
+              "bodyParameters": {
+                "parameter": [
+                  {
+                    "text": "={{$json.customer_name}}"
+                  },
+                  {
+                    "text": "={{$json.service_name}}"
+                  },
+                  {
+                    "text": "={{$json.service_category}}"
+                  },
+                  {
+                    "text": "={{$json.app_date}}"
+                  },
+                  {
+                    "text": "={{$json.app_time}}"
+                  },
+                  {
+                    "text": "={{$json.service_duration}}"
+                  },
+                  {
+                    "text": "={{$json.PAX}}"
+                  },
+                  {
+                    "text": "={{$json.adult_cnt}}"
+                  },
+                  {
+                    "text": "={{ $json.adult_price }}"
+                  },
+                  {
+                    "text": "={{$json.kids_cnt}}"
+                  },
+                  {
+                    "text": "={{ $json.kids_price }}"
+                  },
+                  {
+                    "text": "={{$json.additional_services}}"
+                  },
+                  {
+                    "text": "={{$json.app_total_price}}"
+                  },
+                  {
+                    "text": "={{ $json.app_paid_price }}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1952,
+        128
+      ],
+      "id": "7cf95ac7-d78b-4fd2-b2a4-4136db9d1f40",
+      "name": "Send template1",
+      "webhookId": "a67ca175-f2b8-4c99-ae0e-7b22de55d35b",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "Qkwpq4H3JlTH5FKG",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "phoneNumberId": "843177978870149",
+        "recipientPhoneNumber": "={{ $json.customer_number }}",
+        "template": "booknetic_remind_pax|en",
+        "components": {
+          "component": [
+            {
+              "bodyParameters": {
+                "parameter": [
+                  {
+                    "text": "={{$json.customer_name}}"
+                  },
+                  {
+                    "text": "={{$json.service_name}}"
+                  },
+                  {
+                    "text": "={{$json.service_category}}"
+                  },
+                  {
+                    "text": "={{$json.app_date}}"
+                  },
+                  {
+                    "text": "={{$json.app_time}}"
+                  },
+                  {
+                    "text": "={{$json.service_duration}}"
+                  },
+                  {
+                    "text": "={{$json.PAX}}"
+                  },
+                  {
+                    "text": "={{$json.adult_cnt}}"
+                  },
+                  {
+                    "text": "={{ $json.adult_price }}"
+                  },
+                  {
+                    "text": "={{$json.kids_cnt}}"
+                  },
+                  {
+                    "text": "={{ $json.kids_price }}"
+                  },
+                  {
+                    "text": "={{ $json.service_price }}"
+                  },
+                  {
+                    "text": "={{$json.additional_services}}"
+                  },
+                  {
+                    "text": "={{$json.app_total_price}}"
+                  },
+                  {
+                    "text": "={{ $json.app_paid_price }}"
+                  },
+                  {
+                    "text": "={{ $json.customer_number }}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1744,
+        672
+      ],
+      "id": "59e81dfe-1c6c-42a3-af83-c695ef31cd16",
+      "name": "Send template2",
+      "webhookId": "a67ca175-f2b8-4c99-ae0e-7b22de55d35b",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "Qkwpq4H3JlTH5FKG",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "phoneNumberId": "843177978870149",
+        "recipientPhoneNumber": "={{ $json.customer_number }}",
+        "template": "booknetic_remind|en",
+        "components": {
+          "component": [
+            {
+              "bodyParameters": {
+                "parameter": [
+                  {
+                    "text": "={{$json.customer_name}}"
+                  },
+                  {
+                    "text": "={{ $json.customer_number }}"
+                  },
+                  {
+                    "text": "={{$json.service_name}}"
+                  },
+                  {
+                    "text": "={{$json.service_category}}"
+                  },
+                  {
+                    "text": "={{$json.app_date}}"
+                  },
+                  {
+                    "text": "={{$json.app_time}}"
+                  },
+                  {
+                    "text": "={{$json.service_duration}}"
+                  },
+                  {
+                    "text": "={{$json.PAX}}"
+                  },
+                  {
+                    "text": "={{$json.adult_cnt}}"
+                  },
+                  {
+                    "text": "={{ $json.adult_price }}"
+                  },
+                  {
+                    "text": "={{$json.kids_cnt}}"
+                  },
+                  {
+                    "text": "={{ $json.kids_price }}"
+                  },
+                  {
+                    "text": "={{$json.additional_services}}"
+                  },
+                  {
+                    "text": "={{$json.app_total_price}}"
+                  },
+                  {
+                    "text": "={{ $json.app_paid_price }}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1744,
+        912
+      ],
+      "id": "99ca91ea-b271-4d17-a404-bb60a3320c82",
+      "name": "Send template3",
+      "webhookId": "a67ca175-f2b8-4c99-ae0e-7b22de55d35b",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "Qkwpq4H3JlTH5FKG",
+          "name": "WhatsApp account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sheets' Names": {
+      "main": [
+        [
+          {
+            "node": "Filtering Tours for Today and Tomorrow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtering Tours for Today and Tomorrow": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "PAX Normalizer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PAX Normalizer 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "PAX Normalizer 3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PAX Normalizer 4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Fetching Booking Details",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Booking Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Paid Amount",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetching Booking Details": {
+      "main": [
+        [
+          {
+            "node": "Append Row for New Bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PAX Normalizer": {
+      "main": [
+        [
+          {
+            "node": "Send template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PAX Normalizer 2": {
+      "main": [
+        [
+          {
+            "node": "Send template1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Getting Newly Added Booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Getting Newly Added Booking": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Row for New Bookings": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PAX Normalizer 3": {
+      "main": [
+        [
+          {
+            "node": "Send template2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PAX Normalizer 4": {
+      "main": [
+        [
+          {
+            "node": "Send template3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Sheets' Names",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Qatar",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "b1b05219-762d-4c81-a2b0-c7a292777b72",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "00e2d86f18476fa48a0bbe70e4f34123227f25798f2099883f45d509f13b7aa9"
+  },
+  "id": "DU8wU8OW6L51OnIX",
+  "tags": []
+}
